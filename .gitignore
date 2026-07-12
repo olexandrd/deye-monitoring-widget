@@ -1,0 +1,31 @@
+# PlatformIO build output and downloaded libraries
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Local editor/project files
+.vscode/
+.idea/
+
+# Local secrets and machine-specific firmware config
+src/config.h
+.env
+.env.*
+*.local
+
+# OS metadata
+.DS_Store
+._*
+Thumbs.db
+
+# Firmware/build artifacts
+*.bin
+*.elf
+*.hex
+*.map
+*.uf2
+*.o
+*.a
+*.d
+*.dblite
+compile_commands.json

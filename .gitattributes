@@ -1,0 +1,4 @@
+* text=auto
+
+# The ready-to-print case model is intentionally committed as ASCII STL.
+*.stl text eol=lf
