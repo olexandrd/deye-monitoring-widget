@@ -182,6 +182,16 @@ This non-commercial license is applied intentionally to the firmware,
 documentation, and the case STL, even though Creative Commons recommends
 software-specific licenses for software-only projects.
 
+## Third-Party Notice
+
+This is an unofficial project and is not affiliated with or endorsed by Deye,
+Solarman, PlatformIO, Espressif, Arduino, or U8g2.
+
+The repository license applies only to the original project files in this
+repository. Third-party dependencies are distributed under their own licenses.
+No vendor firmware, proprietary documentation, credentials, or cloud service
+materials are included.
+
 ## Fake Data Mode
 
 For early display and wiring tests, set:
