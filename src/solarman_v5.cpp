@@ -38,6 +38,11 @@ SolarmanV5::SolarmanV5(uint32_t loggerSerial)
     : _loggerSerial(loggerSerial), _sequence(1) {
 }
 
+void SolarmanV5::setLoggerSerial(uint32_t loggerSerial) {
+    _loggerSerial = loggerSerial;
+    _sequence = 1;
+}
+
 size_t SolarmanV5::buildReadHoldingRegistersFrame(
     uint8_t slaveId,
     uint16_t startRegister,

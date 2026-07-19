@@ -151,6 +151,7 @@ Set:
 - `WIFI_PASSWORD`
 - `DEYE_LOGGER_IP`
 - `DEYE_LOGGER_SERIAL`
+- `BLE_SETUP_ENABLED`, `BLE_SETUP_DEVICE_NAME`, and `BLE_SETUP_HOLD_MS` if using BLE setup mode
 - `OLED_SDA_PIN` and `OLED_SCL_PIN` if your ESP32-C3 SuperMini revision uses different pins
 - `WAKE_BUTTON_ENABLED` and `WAKE_BUTTON_PIN` only if using a separate ESP GPIO wake button instead of the MH-CD42 button
 - `MH_CD42_KEEPALIVE_ENABLED` and `MH_CD42_KEEPALIVE_PIN` for the periodic MH-CD42 `KEY` pulse
@@ -158,6 +159,44 @@ Set:
 - `SUPPLY_BATTERY_EMPTY_MV` and `SUPPLY_BATTERY_FULL_MV` to calibrate the displayed power battery percentage
 
 `src/config.h` is ignored by git so Wi-Fi credentials are not committed.
+
+On boot, the firmware first loads runtime settings from ESP32 NVS. If a value
+has never been saved through BLE, the matching `src/config.h` value is used as
+the default.
+
+## BLE Setup Mode
+
+Hold the ESP wake button for 5 seconds while the firmware is awake to start BLE
+setup mode. The device advertises for 3 minutes using a Nordic UART-compatible
+service:
+
+```text
+Service: 6E400001-B5A3-F393-E0A9-E50E24DCCA9E
+RX/write: 6E400002-B5A3-F393-E0A9-E50E24DCCA9E
+TX/notify: 6E400003-B5A3-F393-E0A9-E50E24DCCA9E
+```
+
+Use a generic BLE client such as nRF Connect or LightBlue, connect to
+`BLE_SETUP_DEVICE_NAME`, subscribe to TX notifications, then write `start` to
+RX as UTF-8 text. Until `start` is received, the firmware periodically sends
+`WRITE start` notifications so generic clients can display the ready state.
+The setup flow is text-based:
+
+```text
+Deye Monitor Setup v3
+SSID?
+PASS?
+DEYE HOST?
+DEYE SERIAL?
+SAVE yes/no?
+```
+
+The firmware also sends a short `CUR ...` line before prompts where a current
+value is useful. Send an empty text value at any prompt to keep the current
+value. The legacy `skip` command is still accepted too. After `yes`, the
+firmware tests the Wi-Fi connection before saving. If Wi-Fi connects within
+`BLE_WIFI_TEST_TIMEOUT_MS`, the full configuration is written to NVS and reused
+after power loss. If the test fails, the old active configuration stays in NVS.
 
 ## Build and Flash
 
@@ -170,6 +209,10 @@ pio device monitor
 ```
 
 Serial monitor baud rate is `115200`.
+
+BLE support makes the firmware too large for the default dual-OTA partition
+layout on a 4MB ESP32-C3 board. `platformio.ini` uses `huge_app.csv`, which
+keeps a large single app slot and does not reserve OTA update slots.
 
 ## License
 

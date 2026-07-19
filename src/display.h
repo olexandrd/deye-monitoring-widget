@@ -8,6 +8,7 @@ enum class AppState {
     Boot,
     WiFiConnecting,
     WiFiError,
+    BleSetup,
     DeyePolling,
     Ok,
     Stale,

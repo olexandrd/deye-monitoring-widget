@@ -6,6 +6,7 @@
 class SolarmanV5 {
 public:
     explicit SolarmanV5(uint32_t loggerSerial);
+    void setLoggerSerial(uint32_t loggerSerial);
 
     size_t buildReadHoldingRegistersFrame(
         uint8_t slaveId,
