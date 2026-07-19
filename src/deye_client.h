@@ -31,6 +31,12 @@ public:
         uint8_t slaveId
     );
 
+    void configure(
+        const char* host,
+        uint16_t port,
+        uint32_t loggerSerial,
+        uint8_t slaveId
+    );
     bool poll(InverterMetrics& metrics);
     const char* lastError() const;
 

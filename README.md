@@ -151,6 +151,7 @@ Set:
 - `WIFI_PASSWORD`
 - `DEYE_LOGGER_IP`
 - `DEYE_LOGGER_SERIAL`
+- `BLE_SETUP_ENABLED`, `BLE_SETUP_DEVICE_NAME`, and `BLE_SETUP_HOLD_MS` if using BLE setup mode
 - `OLED_SDA_PIN` and `OLED_SCL_PIN` if your ESP32-C3 SuperMini revision uses different pins
 - `WAKE_BUTTON_ENABLED` and `WAKE_BUTTON_PIN` only if using a separate ESP GPIO wake button instead of the MH-CD42 button
 - `MH_CD42_KEEPALIVE_ENABLED` and `MH_CD42_KEEPALIVE_PIN` for the periodic MH-CD42 `KEY` pulse
@@ -158,6 +159,53 @@ Set:
 - `SUPPLY_BATTERY_EMPTY_MV` and `SUPPLY_BATTERY_FULL_MV` to calibrate the displayed power battery percentage
 
 `src/config.h` is ignored by git so Wi-Fi credentials are not committed.
+Setting `BLE_SETUP_ENABLED` to `0` also excludes the BLE implementation and its
+framework library from the linked firmware.
+
+On boot, the firmware first loads runtime settings from ESP32 NVS. If a value
+has never been saved through BLE, the matching `src/config.h` value is used as
+the default.
+
+## BLE Setup Mode
+
+BLE setup mode is entered from a long press on the ESP GPIO wake button, so it
+requires `WAKE_BUTTON_ENABLED` to be set to `1` and a button wired to
+`WAKE_BUTTON_PIN`. Hold that button for 5 seconds while the firmware is awake to
+start BLE setup mode. The device advertises for 3 minutes using a Nordic
+UART-compatible service:
+
+```text
+Service: 6E400001-B5A3-F393-E0A9-E50E24DCCA9E
+RX/write: 6E400002-B5A3-F393-E0A9-E50E24DCCA9E
+TX/notify: 6E400003-B5A3-F393-E0A9-E50E24DCCA9E
+```
+
+Use a generic BLE client such as nRF Connect or LightBlue, connect to
+`BLE_SETUP_DEVICE_NAME`, subscribe to TX notifications, then write `start` to
+RX as UTF-8 text. Until `start` is received, the firmware periodically sends
+`WRITE start` notifications so generic clients can display the ready state.
+The setup flow is text-based:
+
+```text
+SETUP v3
+SSID?
+PASS?
+DEYE HOST?
+DEYE SERIAL?
+SAVE yes/no?
+```
+
+The firmware also sends `empty keeps old` at the start of the flow and a short
+`CUR ...` line before prompts where a current value is useful. Send an empty
+text value at any prompt to keep the current value. Single-write clients remain
+compatible. Longer answers may be split across consecutive writes; append a
+newline to the final fragment to complete the value immediately. Values such as
+`start`, `?`, and `skip` are treated literally after the setup flow has started.
+After `yes`, the firmware tests the Wi-Fi connection before saving. If Wi-Fi
+connects within
+`BLE_WIFI_TEST_TIMEOUT_MS`, the full configuration is atomically written to NVS
+and reused after power loss. If the test or save fails, the old active
+configuration stays in NVS.
 
 ## Build and Flash
 
@@ -170,6 +218,10 @@ pio device monitor
 ```
 
 Serial monitor baud rate is `115200`.
+
+BLE support makes the firmware too large for the default partition layout on a
+4MB ESP32-C3 board. `platformio.ini` uses `min_spiffs.csv`, which provides two
+larger application slots and keeps OTA partitions available.
 
 ## License
 
@@ -234,7 +286,7 @@ GRID 0W
 OK 23s ago
 ```
 
-States include boot, Wi-Fi connecting, Wi-Fi error, Deye polling, OK, stale, and Deye error. On failures, the display keeps the last valid metrics when available.
+States include boot, Wi-Fi connecting, Wi-Fi error, BLE setup, Deye polling, OK, stale, and Deye error. On failures, the display keeps the last valid metrics when available.
 
 The screen starts at 50% OLED contrast, dims to 20% after 3 minutes, and enters ESP32 deep sleep after 10 minutes. In the default MH-CD42 mode, press the MH-CD42 onboard or remote button to restore 5V power and boot the ESP32-C3 again. If `WAKE_BUTTON_ENABLED` is set to `1`, pressing the ESP GPIO wake button while the device is awake restores the 50% display level and restarts the 3/10 minute timers.
 

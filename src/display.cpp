@@ -26,6 +26,8 @@ const char* stateLabel(AppState state) {
             return "WiFi";
         case AppState::WiFiError:
             return "WiFi ERR";
+        case AppState::BleSetup:
+            return "BLE CFG";
         case AppState::DeyePolling:
             return "POLL";
         case AppState::Ok:

@@ -38,6 +38,15 @@
 #define WAKE_BUTTON_ACTIVE_LOW 1
 #define WAKE_BUTTON_DEBOUNCE_MS 50
 
+// BLE setup mode. Setting this to 0 excludes BLE code from the linked firmware.
+// Hold the wake button for 5 seconds while the ESP is awake to expose a Nordic
+// UART-compatible BLE service for 3 minutes.
+#define BLE_SETUP_ENABLED 1
+#define BLE_SETUP_DEVICE_NAME "Deye Monitor"
+#define BLE_SETUP_HOLD_MS 5000UL
+#define BLE_SETUP_WINDOW_MS 180000UL
+#define BLE_WIFI_TEST_TIMEOUT_MS 20000UL
+
 // MH-CD42 KEY keep-alive. The ESP periodically pulls the MH-CD42 KEY input low
 // so the module keeps its 5V output enabled with a small load.
 // Direct GPIO wiring is OK only if KEY is measured <= 3.3V when released.

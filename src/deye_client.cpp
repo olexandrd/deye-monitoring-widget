@@ -43,6 +43,19 @@ DeyeClient::DeyeClient(
     memset(_rawRegisters, 0, sizeof(_rawRegisters));
 }
 
+void DeyeClient::configure(
+    const char* host,
+    uint16_t port,
+    uint32_t loggerSerial,
+    uint8_t slaveId
+) {
+    _host = host;
+    _port = port;
+    _slaveId = slaveId;
+    _solarman.setLoggerSerial(loggerSerial);
+    setError("not polled");
+}
+
 bool DeyeClient::poll(InverterMetrics& metrics) {
     uint8_t tx[TxBufferSize];
     uint8_t rx[RxBufferSize];
