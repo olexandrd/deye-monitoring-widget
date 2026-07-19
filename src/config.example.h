@@ -38,8 +38,9 @@
 #define WAKE_BUTTON_ACTIVE_LOW 1
 #define WAKE_BUTTON_DEBOUNCE_MS 50
 
-// BLE setup mode. Hold the wake button for 5 seconds while the ESP is awake to
-// expose a Nordic UART-compatible BLE service for 3 minutes.
+// BLE setup mode. Setting this to 0 excludes BLE code from the linked firmware.
+// Hold the wake button for 5 seconds while the ESP is awake to expose a Nordic
+// UART-compatible BLE service for 3 minutes.
 #define BLE_SETUP_ENABLED 1
 #define BLE_SETUP_DEVICE_NAME "Deye Monitor"
 #define BLE_SETUP_HOLD_MS 5000UL

@@ -1,11 +1,20 @@
+#include "config.h"
+
+#ifndef BLE_SETUP_ENABLED
+#define BLE_SETUP_ENABLED 1
+#endif
+
+#if BLE_SETUP_ENABLED
+
 #include "ble_setup.h"
+
+#include <string.h>
+#include <string>
 
 #include <BLE2902.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-
-#include "config.h"
 
 #ifndef BLE_SETUP_DEVICE_NAME
 #define BLE_SETUP_DEVICE_NAME "Deye Monitor"
@@ -21,6 +30,7 @@ constexpr const char* TxUuid = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";
 constexpr size_t NotifyChunkLen = 18;
 constexpr const char* ReadyText = "WRITE start\r\n";
 constexpr uint32_t ReadyReminderMs = 2000UL;
+constexpr uint32_t RxWriteIdleMs = 250UL;
 
 BleSetupMode* activeSetup = nullptr;
 BLEServer* bleServer = nullptr;
@@ -48,7 +58,11 @@ public:
             return;
         }
 
-        activeSetup->handleRxWrite(String(characteristic->getValue().c_str()));
+        const std::string value = characteristic->getValue();
+        activeSetup->handleRxWrite(
+            reinterpret_cast<const uint8_t*>(value.data()),
+            value.length()
+        );
     }
 };
 
@@ -77,6 +91,7 @@ void BleSetupMode::begin(const RuntimeConfig& currentConfig, uint32_t nowMs) {
     _stopAtMs = 0;
     _nextPromptReminderMs = 0;
     _promptReminderCount = 0;
+    resetRxInput();
 
     startBle();
     Serial.println("BLE setup: advertising started for 3 minutes");
@@ -86,6 +101,8 @@ void BleSetupMode::handle(uint32_t nowMs) {
     if (!_active) {
         return;
     }
+
+    processRxInput(nowMs);
 
     if (_stopAtMs != 0 && nowMs >= _stopAtMs) {
         stop();
@@ -130,6 +147,7 @@ void BleSetupMode::stop() {
     _stopAtMs = 0;
     _nextPromptReminderMs = 0;
     _promptReminderCount = 0;
+    resetRxInput();
 }
 
 bool BleSetupMode::active() const {
@@ -194,31 +212,92 @@ void BleSetupMode::handleClientDisconnected() {
     }
 }
 
-void BleSetupMode::handleRxWrite(const String& value) {
+void BleSetupMode::handleRxWrite(const uint8_t* data, size_t len) {
     if (!_active) {
         return;
     }
 
-    const String input = cleanedInput(value);
-    Serial.printf("BLE setup RX: %u bytes\n", static_cast<unsigned>(input.length()));
+    portENTER_CRITICAL(&_rxMux);
+    if (!_rxLineReady) {
+        if (len == 0) {
+            _rxLineReady = true;
+        } else {
+            for (size_t i = 0; i < len; ++i) {
+                const char value = static_cast<char>(data[i]);
+                if (value == '\r' || value == '\n') {
+                    _rxLineReady = true;
+                    break;
+                }
+                if (_rxLength < sizeof(_rxBuffer) - 1) {
+                    _rxBuffer[_rxLength++] = value;
+                } else {
+                    _rxOverflow = true;
+                }
+            }
+        }
+        _rxLastWriteMs = millis();
+    }
+    portEXIT_CRITICAL(&_rxMux);
+}
+
+void BleSetupMode::processRxInput(uint32_t nowMs) {
+    char value[sizeof(_rxBuffer)] = {};
+    size_t valueLength = 0;
+    bool overflow = false;
+
+    portENTER_CRITICAL(&_rxMux);
+    const bool idleWriteComplete = _rxLength > 0 &&
+        static_cast<int32_t>(nowMs - _rxLastWriteMs) >= static_cast<int32_t>(RxWriteIdleMs);
+    if (!_rxLineReady && !idleWriteComplete) {
+        portEXIT_CRITICAL(&_rxMux);
+        return;
+    }
+
+    valueLength = _rxLength;
+    memcpy(value, _rxBuffer, valueLength);
+    value[valueLength] = '\0';
+    overflow = _rxOverflow;
+    _rxLength = 0;
+    _rxLineReady = false;
+    _rxOverflow = false;
+    _rxLastWriteMs = 0;
+    portEXIT_CRITICAL(&_rxMux);
+
+    Serial.printf("BLE setup RX: %u bytes\n", static_cast<unsigned>(valueLength));
     _nextPromptReminderMs = 0;
     _promptReminderCount = 0;
 
-    if (inputIsStart(input)) {
-        _stage = Stage::WiFiSsid;
-        sendText("\r\nSETUP v3\r\n");
-        sendText("empty keeps old\r\n");
-        sendCurrentValue();
+    if (overflow) {
+        sendText("\r\nINPUT TOO LONG\r\n");
         sendPrompt();
         return;
     }
 
+    const String input = cleanedInput(String(value));
     if (_stage == Stage::Ready) {
+        if (inputIsStart(input)) {
+            _stage = Stage::WiFiSsid;
+            sendText("\r\nSETUP v3\r\n");
+            sendText("empty keeps old\r\n");
+            sendCurrentValue();
+            sendPrompt();
+            return;
+        }
         sendText(ReadyText);
         return;
     }
 
     advanceWithValue(input);
+}
+
+void BleSetupMode::resetRxInput() {
+    portENTER_CRITICAL(&_rxMux);
+    memset(_rxBuffer, 0, sizeof(_rxBuffer));
+    _rxLength = 0;
+    _rxLineReady = false;
+    _rxOverflow = false;
+    _rxLastWriteMs = 0;
+    portEXIT_CRITICAL(&_rxMux);
 }
 
 void BleSetupMode::startBle() {
@@ -343,7 +422,7 @@ void BleSetupMode::sendPrompt() {
 void BleSetupMode::advanceWithValue(const String& input) {
     switch (_stage) {
         case Stage::WiFiSsid:
-            if (!inputIsSkip(input) && !runtimeConfigCopyString(
+            if (input.length() > 0 && !runtimeConfigCopyString(
                     _sessionConfig.wifiSsid,
                     sizeof(_sessionConfig.wifiSsid),
                     input
@@ -359,7 +438,7 @@ void BleSetupMode::advanceWithValue(const String& input) {
             return;
 
         case Stage::WiFiPassword:
-            if (!inputIsSkip(input) && !runtimeConfigCopyString(
+            if (input.length() > 0 && !runtimeConfigCopyString(
                     _sessionConfig.wifiPassword,
                     sizeof(_sessionConfig.wifiPassword),
                     input
@@ -375,9 +454,8 @@ void BleSetupMode::advanceWithValue(const String& input) {
             return;
 
         case Stage::DeyeHost:
-            if (!inputIsSkip(input)) {
-                if (input.length() == 0 || input.indexOf(' ') >= 0 ||
-                    !runtimeConfigCopyString(
+            if (input.length() > 0) {
+                if (input.indexOf(' ') >= 0 || !runtimeConfigCopyString(
                         _sessionConfig.deyeHost,
                         sizeof(_sessionConfig.deyeHost),
                         input
@@ -394,7 +472,7 @@ void BleSetupMode::advanceWithValue(const String& input) {
             return;
 
         case Stage::DeyeSerial:
-            if (!inputIsSkip(input)) {
+            if (input.length() > 0) {
                 uint32_t serial = 0;
                 if (!parseSerial(input, serial)) {
                     sendText("\r\nSERIAL INVALID\r\n");
@@ -439,10 +517,6 @@ bool BleSetupMode::inputIsStart(const String& input) const {
     return input.equalsIgnoreCase("start") || input == "?";
 }
 
-bool BleSetupMode::inputIsSkip(const String& input) const {
-    return input.length() == 0 || input.equalsIgnoreCase("skip");
-}
-
 bool BleSetupMode::inputIsYes(const String& input) const {
     return input.equalsIgnoreCase("yes") || input.equalsIgnoreCase("y");
 }
@@ -475,3 +549,5 @@ bool BleSetupMode::parseSerial(const String& input, uint32_t& serial) const {
 void BleSetupMode::scheduleStop(uint32_t delayMs) {
     _stopAtMs = millis() + delayMs;
 }
+
+#endif

@@ -3,8 +3,13 @@
 #include <driver/gpio.h>
 #include <esp_sleep.h>
 
-#include "ble_setup.h"
 #include "config.h"
+#ifndef BLE_SETUP_ENABLED
+#define BLE_SETUP_ENABLED 1
+#endif
+#if BLE_SETUP_ENABLED
+#include "ble_setup.h"
+#endif
 #include "deye_client.h"
 #include "display.h"
 #include "metrics.h"
@@ -34,9 +39,6 @@
 #endif
 #ifndef WAKE_BUTTON_DEBOUNCE_MS
 #define WAKE_BUTTON_DEBOUNCE_MS 50
-#endif
-#ifndef BLE_SETUP_ENABLED
-#define BLE_SETUP_ENABLED 1
 #endif
 #ifndef BLE_SETUP_HOLD_MS
 #define BLE_SETUP_HOLD_MS 5000UL
@@ -89,14 +91,18 @@ constexpr uint32_t WiFiRetryMaxMs = 30000;
 
 InverterMetrics metrics;
 RuntimeConfig runtimeConfig;
+#if BLE_SETUP_ENABLED
 RuntimeConfig pendingBleConfig;
+#endif
 DeyeClient deyeClient(
     DEYE_LOGGER_IP,
     DEYE_LOGGER_PORT,
     DEYE_LOGGER_SERIAL,
     DEYE_MODBUS_SLAVE_ID
 );
+#if BLE_SETUP_ENABLED
 BleSetupMode bleSetup;
+#endif
 
 SupplyBatteryStatus supplyBattery = {false, NAN, 0};
 AppState appState = AppState::Boot;
@@ -115,8 +121,10 @@ bool wakeButtonLongPressHandled = false;
 uint32_t nextMhCd42KeepAliveMs = 0;
 uint32_t mhCd42KeepAlivePulseStartedMs = 0;
 bool mhCd42KeepAlivePulseActive = false;
+#if BLE_SETUP_ENABLED
 bool wifiConfigTestActive = false;
 uint32_t wifiConfigTestDeadlineMs = 0;
+#endif
 
 void showState(AppState state, const char* detail = nullptr) {
     appState = state;
@@ -343,7 +351,9 @@ void enterDeepSleep(uint32_t nowMs) {
     delay(250);
 
     releaseMhCd42KeepAlivePin();
+#if BLE_SETUP_ENABLED
     bleSetup.stop();
+#endif
     displaySleep();
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
@@ -380,6 +390,7 @@ void startWiFiConnect(uint32_t nowMs) {
     startWiFiConnect(nowMs, runtimeConfig);
 }
 
+#if BLE_SETUP_ENABLED
 void startBleWiFiConfigTest(uint32_t nowMs, const RuntimeConfig& config) {
     pendingBleConfig = config;
     wifiConfigTestActive = true;
@@ -437,6 +448,7 @@ bool handleBleWiFiConfigTest(uint32_t nowMs) {
     showState(AppState::WiFiConnecting, "test");
     return true;
 }
+#endif
 
 void handleWiFi(uint32_t nowMs) {
     const wl_status_t status = WiFi.status();
@@ -577,10 +589,13 @@ void loop() {
     const uint32_t nowMs = millis();
     handleWakeButton(nowMs);
     handleMhCd42KeepAlive(nowMs);
+#if BLE_SETUP_ENABLED
     bleSetup.handle(nowMs);
+#endif
     updateSupplyBattery(nowMs);
     handleDisplayPower(nowMs);
 
+#if BLE_SETUP_ENABLED
     RuntimeConfig requestedConfig;
     if (bleSetup.takeSaveRequest(requestedConfig)) {
         startBleWiFiConfigTest(nowMs, requestedConfig);
@@ -590,13 +605,16 @@ void loop() {
         yield();
         return;
     }
+#endif
 
     handleWiFi(nowMs);
 
+#if BLE_SETUP_ENABLED
     if (bleSetup.active()) {
         yield();
         return;
     }
+#endif
 
 #if USE_FAKE_DATA
     pollDeye(nowMs);

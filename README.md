@@ -159,6 +159,8 @@ Set:
 - `SUPPLY_BATTERY_EMPTY_MV` and `SUPPLY_BATTERY_FULL_MV` to calibrate the displayed power battery percentage
 
 `src/config.h` is ignored by git so Wi-Fi credentials are not committed.
+Setting `BLE_SETUP_ENABLED` to `0` also excludes the BLE implementation and its
+framework library from the linked firmware.
 
 On boot, the firmware first loads runtime settings from ESP32 NVS. If a value
 has never been saved through BLE, the matching `src/config.h` value is used as
@@ -193,10 +195,14 @@ SAVE yes/no?
 
 The firmware also sends a short `CUR ...` line before prompts where a current
 value is useful. Send an empty text value at any prompt to keep the current
-value. The legacy `skip` command is still accepted too. After `yes`, the
-firmware tests the Wi-Fi connection before saving. If Wi-Fi connects within
-`BLE_WIFI_TEST_TIMEOUT_MS`, the full configuration is written to NVS and reused
-after power loss. If the test fails, the old active configuration stays in NVS.
+value. Single-write clients remain compatible. Longer answers may be split
+across consecutive writes; append a newline to the final fragment to complete
+the value immediately. Values such as `start`, `?`, and `skip` are treated
+literally after the setup flow has started. After `yes`, the firmware tests the
+Wi-Fi connection before saving. If Wi-Fi connects within
+`BLE_WIFI_TEST_TIMEOUT_MS`, the full configuration is atomically written to NVS
+and reused after power loss. If the test or save fails, the old active
+configuration stays in NVS.
 
 ## Build and Flash
 
@@ -210,9 +216,9 @@ pio device monitor
 
 Serial monitor baud rate is `115200`.
 
-BLE support makes the firmware too large for the default dual-OTA partition
-layout on a 4MB ESP32-C3 board. `platformio.ini` uses `huge_app.csv`, which
-keeps a large single app slot and does not reserve OTA update slots.
+BLE support makes the firmware too large for the default partition layout on a
+4MB ESP32-C3 board. `platformio.ini` uses `min_spiffs.csv`, which provides two
+larger application slots and keeps OTA partitions available.
 
 ## License
 
